@@ -1,4 +1,4 @@
-package com.example.room307.files.di
+package com.example.room307.di
 
 import com.example.room307.files.data.repository.FileRepositoryImp
 import com.example.room307.files.domain.repository.FileRepository
