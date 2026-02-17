@@ -1,19 +1,18 @@
 package com.example.room307.files.presentation
 
-import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.room307.files.data.remote.FileDto
+import com.example.room307.files.domain.FileDownloader
 import com.example.room307.files.domain.repository.FileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 import javax.inject.Inject
 
 data class FileUiState(
@@ -22,7 +21,12 @@ data class FileUiState(
     val searchQuery: String = "",
     val uploadProgress: Float? = null,
     val isRefreshing: Boolean = false,
+    val isDownloading: Boolean = false
 )
+
+sealed interface FileEvent {
+    data class ShowSnackbar(val message: String) : FileEvent
+}
 
 sealed interface FileState {
     object Idle : FileState
@@ -34,9 +38,14 @@ sealed interface FileState {
 @HiltViewModel
 class FileViewModel @Inject constructor(
     private val repository: FileRepository,
+    private val fileDownloader: FileDownloader
 ) : ViewModel() {
+
     private val _state = MutableStateFlow<FileState>(FileState.Idle)
     val state = _state.asStateFlow()
+
+    private val _events = Channel<FileEvent>(Channel.BUFFERED)
+    val events = _events.receiveAsFlow()
 
     init {
         loadFiles()
@@ -44,168 +53,111 @@ class FileViewModel @Inject constructor(
 
     fun onAction(action: FileAction) {
         when (action) {
-            is FileAction.LoadFiles -> {
-                loadFiles()
-            }
-
-            is FileAction.SearchFiles -> {
-                searchFiles(action.query)
-            }
-
-            is FileAction.DownloadFile -> {
-                downloadFile(action.fileId)
-            }
-
-            is FileAction.DeleteFile -> {
-                deleteFile(action.fileId)
-            }
-
-            is FileAction.UploadFile -> {
-                uploadFile(action.file)
-            }
-
-            is FileAction.RefreshFiles -> {
-                refreshFiles()
-            }
+            is FileAction.LoadFiles -> loadFiles()
+            is FileAction.SearchFiles -> searchFiles(action.query)
+            is FileAction.DownloadFile -> downloadFile(action.fileId, action.fileName)
+            is FileAction.DeleteFile -> deleteFile(action.fileId)
+            is FileAction.UploadFile -> uploadFile(action.file)
+            is FileAction.RefreshFiles -> refreshFiles()
         }
     }
 
     private fun refreshFiles() {
-        val currentState = _state.value
-        if (currentState !is FileState.Ready) return
-
-        _state.update { state ->
-            if (state is FileState.Ready) {
-                state.copy(uiState = state.uiState.copy(isRefreshing = true))
-            } else state
-        }
-
+        updateReadyState { it.copy(isRefreshing = true) }
         viewModelScope.launch {
-            try {
-                val result = repository.getAll().getOrThrow()
-                _state.update { state ->
-                    if (state is FileState.Ready) {
-                        val query = state.uiState.searchQuery
-                        val filtered = if (query.isBlank()) {
-                            result
-                        } else {
-                            result.filter { it.name?.contains(query, ignoreCase = true) == true }
-                        }
-                        state.copy(
-                            uiState = state.uiState.copy(
-                                files = result,
-                                displayedFiles = filtered,
-                                isRefreshing = false
-                            )
-                        )
-                    } else state
+            repository.getAll()
+                .onSuccess { result ->
+                    updateReadyState { state ->
+                        val filtered = if (state.searchQuery.isBlank()) result
+                        else result.filter { it.name?.contains(state.searchQuery, ignoreCase = true) == true }
+                        state.copy(files = result, displayedFiles = filtered, isRefreshing = false)
+                    }
                 }
-            } catch (e: Exception) {
-                _state.update { state ->
-                    if (state is FileState.Ready) {
-                        state.copy(uiState = state.uiState.copy(isRefreshing = false))
-                    } else state
+                .onFailure { e ->
+                    updateReadyState { it.copy(isRefreshing = false) }
+                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Refresh failed"))
                 }
-            }
         }
     }
 
     private fun loadFiles() {
         _state.update { FileState.Loading }
         viewModelScope.launch {
-            try {
-                val files = repository.getAll().getOrThrow()
-                _state.update {
-                    FileState.Ready(
-                        uiState = FileUiState(
-                            files = files,
-                            displayedFiles = files,
-                        )
-                    )
+            repository.getAll()
+                .onSuccess { files ->
+                    _state.update {
+                        FileState.Ready(FileUiState(files = files, displayedFiles = files))
+                    }
                 }
-            } catch (e: Exception) {
-                _state.update { FileState.Error(e.message ?: "Unknown error") }
-            }
+                .onFailure { e ->
+                    _state.update { FileState.Error(e.message ?: "Failed to load files") }
+                }
         }
     }
 
     private fun uploadFile(file: File) {
-        _state.update { FileState.Loading }
+        updateReadyState { it.copy(isRefreshing = true) }
         viewModelScope.launch {
-            try {
-                repository.upload(file).getOrThrow()
-                loadFiles()
-            } catch (e: Exception) {
-                _state.update { FileState.Error(e.message ?: "Upload failed") }
-            }
+            repository.upload(file)
+                .onSuccess { 
+                    _events.trySend(FileEvent.ShowSnackbar("Upload successful"))
+                    refreshFiles() 
+                }
+                .onFailure { e -> 
+                    updateReadyState { it.copy(isRefreshing = false) }
+                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Upload failed")) 
+                }
         }
     }
 
     private fun deleteFile(fileId: String) {
-        _state.update { FileState.Loading }
+        updateReadyState { it.copy(isRefreshing = true) }
         viewModelScope.launch {
-            try {
-                repository.delete(fileId).getOrThrow()
-                loadFiles()
-            } catch (e: Exception) {
-                _state.update { FileState.Error(e.message ?: "Delete failed") }
-            }
+            repository.delete(fileId)
+                .onSuccess { 
+                    _events.trySend(FileEvent.ShowSnackbar("File deleted"))
+                    refreshFiles() 
+                }
+                .onFailure { e -> 
+                    updateReadyState { it.copy(isRefreshing = false) }
+                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Delete failed")) 
+                }
         }
     }
 
-    private fun downloadFile(fileId: String) {
-        val currentState = _state.value
-        if (currentState !is FileState.Ready) return
-
-        val fileDto = currentState.uiState.files.find { it.id == fileId } ?: return
-        val fileName = fileDto.name ?: "downloaded_file_${System.currentTimeMillis()}"
-
-        _state.update { FileState.Loading }
+    private fun downloadFile(fileId: String, filename: String) {
+        updateReadyState { it.copy(isDownloading = true) }
         viewModelScope.launch {
-            try {
-                val responseBody = repository.download(fileId).getOrThrow()
-
-                withContext(Dispatchers.IO) {
-                    val downloadsFolder =
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    val targetFile = File(downloadsFolder, fileName)
-
-                    responseBody.byteStream().use { inputStream ->
-                        FileOutputStream(targetFile).use { outputStream ->
-                            inputStream.copyTo(outputStream)
+            repository.download(fileId)
+                .onSuccess { body ->
+                    viewModelScope.launch {
+                        val success = fileDownloader.saveFileToDisk(filename, body)
+                        updateReadyState { it.copy(isDownloading = false) }
+                        if (!success) {
+                            _events.trySend(FileEvent.ShowSnackbar("Failed to save file"))
                         }
                     }
                 }
-
-                loadFiles()
-            } catch (e: Exception) {
-                _state.update { FileState.Error(e.message ?: "Download failed") }
-            }
+                .onFailure { e ->
+                    updateReadyState { it.copy(isDownloading = false) }
+                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Download failed"))
+                }
         }
     }
 
     private fun searchFiles(query: String) {
+        updateReadyState { current ->
+            val filtered = if (query.isBlank()) current.files
+            else current.files.filter { it.name?.contains(query, ignoreCase = true) == true }
+            current.copy(searchQuery = query, displayedFiles = filtered)
+        }
+    }
+
+    private fun updateReadyState(transform: (FileUiState) -> FileUiState) {
         _state.update { current ->
-            when (current) {
-                is FileState.Ready -> {
-                    val filtered = if (query.isBlank()) {
-                        current.uiState.files
-                    } else {
-                        current.uiState.files.filter { file ->
-                            file.name?.contains(query, ignoreCase = true) == true
-                        }
-                    }
-
-                    current.copy(
-                        uiState = current.uiState.copy(
-                            searchQuery = query,
-                            displayedFiles = filtered,
-                        )
-                    )
-                }
-
-                else -> current
-            }
+            if (current is FileState.Ready) {
+                FileState.Ready(transform(current.uiState))
+            } else current
         }
     }
 }

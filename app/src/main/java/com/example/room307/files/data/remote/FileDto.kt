@@ -1,5 +1,6 @@
 package com.example.room307.files.data.remote
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -7,6 +8,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+@Immutable
 @Serializable
 data class FileDto(
     @SerialName("id")

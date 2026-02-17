@@ -21,10 +21,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.room307.ui.SearchBar
+import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -47,10 +51,18 @@ fun FileScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var fileToDeleteId by remember { mutableStateOf<String?>(null) }
-    var fileToDownloadId by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    val launcher = rememberLauncherForActivityResult(
+    LaunchedEffect(Unit) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                is FileEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            }
+        }
+    }
+
+    val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
@@ -61,77 +73,109 @@ fun FileScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        when (state) {
-            is FileState.Error -> {
-                Text(
-                    text = (state as FileState.Error).message,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
+    val onSearchQueryChanged = remember(viewModel) {
+        { query: String -> viewModel.onAction(FileAction.SearchFiles(query)) }
+    }
 
-            is FileState.Loading -> {
-                CircularProgressIndicator()
-            }
-
-            is FileState.Ready -> {
-                val uiState = (state as FileState.Ready).uiState
-
-                PullToRefreshBox(
-                    modifier = Modifier.fillMaxSize(),
-                    isRefreshing = uiState.isRefreshing,
-                    onRefresh = { viewModel.onAction(FileAction.RefreshFiles) }
-                ) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            when (val currentState = state) {
+                is FileState.Error -> {
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        SearchBar(
-                            searchQuery = uiState.searchQuery,
-                            onSearchQueryChanged = { viewModel.onAction(FileAction.SearchFiles(it)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = "Search global files..."
+                        Text(
+                            text = currentState.message,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(16.dp)
                         )
+                        TextButton(onClick = { viewModel.onAction(FileAction.LoadFiles) }) {
+                            Text("Retry")
+                        }
+                    }
+                }
 
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(bottom = 80.dp)
+                is FileState.Loading -> {
+                    CircularProgressIndicator()
+                }
+
+                is FileState.Ready -> {
+                    val uiState = currentState.uiState
+
+                    PullToRefreshBox(
+                        modifier = Modifier.fillMaxSize(),
+                        isRefreshing = uiState.isRefreshing,
+                        onRefresh = { viewModel.onAction(FileAction.RefreshFiles) }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp, vertical = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            items(uiState.displayedFiles) { file ->
-                                FileCard(
-                                    fileName = file.name ?: "Unknown File",
-                                    fileSize = file.getFormattedSize(),
-                                    fileDate = file.getFormattedDate(),
-                                    onDownloadClick = {
-                                        fileToDownloadId = file.id
-                                    },
-                                    onDeleteClick = {
-                                        fileToDeleteId = file.id
-                                    }
-                                )
+                            SearchBar(
+                                searchQuery = uiState.searchQuery,
+                                onSearchQueryChanged = onSearchQueryChanged,
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = "Search global files..."
+                            )
+
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(bottom = 80.dp)
+                            ) {
+                                items(
+                                    items = uiState.displayedFiles,
+                                    key = { it.id ?: it.name ?: it.hashCode() }
+                                ) { file ->
+                                    FileCard(
+                                        fileName = file.name ?: "Unknown File",
+                                        fileSize = file.getFormattedSize(),
+                                        fileDate = file.getFormattedDate(),
+                                        onDownloadClick = {
+                                            if (file.id != null && file.name != null)
+                                                viewModel.onAction(
+                                                    FileAction.DownloadFile(
+                                                        file.id,
+                                                        file.name
+                                                    )
+                                                )
+                                        },
+                                        onDeleteClick = {
+                                            fileToDeleteId = file.id
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            else -> {}
+                else -> {}
+            }
         }
 
         FloatingActionButton(
-            onClick = { launcher.launch("*/*") },
+            onClick = { pickerLauncher.launch("*/*") },
             modifier = Modifier
-                .padding(16.dp)
                 .align(Alignment.BottomEnd)
+                .padding(16.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Add File"
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 
     fileToDeleteId?.let { fileId ->
@@ -156,29 +200,6 @@ fun FileScreen(
             }
         )
     }
-
-    fileToDownloadId?.let { fileId ->
-        AlertDialog(
-            onDismissRequest = { fileToDownloadId = null },
-            title = { Text(text = "Download File") },
-            text = { Text(text = "Are you sure you want to download this file?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.onAction(FileAction.DownloadFile(fileId))
-                        fileToDownloadId = null
-                    }
-                ) {
-                    Text(text = "Download", color = MaterialTheme.colorScheme.primary)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { fileToDownloadId = null }) {
-                    Text(text = "Cancel")
-                }
-            }
-        )
-    }
 }
 
 private fun uriToFile(context: Context, uri: Uri): File? {
@@ -193,7 +214,7 @@ private fun uriToFile(context: Context, uri: Uri): File? {
         inputStream?.close()
         outputStream.close()
         file
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 }
