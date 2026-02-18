@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.room307.ui.EmptyState
 import com.example.room307.ui.ErrorState
 import com.example.room307.ui.SearchBar
 import kotlinx.coroutines.flow.collectLatest
@@ -115,32 +116,41 @@ fun FileScreen(
                                 placeholder = "Search global files..."
                             )
 
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                contentPadding = PaddingValues(bottom = 80.dp)
-                            ) {
-                                items(
-                                    items = uiState.displayedFiles,
-                                    key = { it.id ?: it.name ?: it.hashCode() }
-                                ) { file ->
-                                    FileCard(
-                                        fileName = file.name ?: "Unknown File",
-                                        fileSize = file.getFormattedSize(),
-                                        fileDate = file.getFormattedDate(),
-                                        onDownloadClick = {
-                                            if (file.id != null && file.name != null)
-                                                viewModel.onAction(
-                                                    FileAction.DownloadFile(
-                                                        file.id,
-                                                        file.name
+                            if (uiState.displayedFiles.isEmpty()) {
+                                EmptyState(
+                                    message = if (uiState.searchQuery.isEmpty()) 
+                                        "You haven't uploaded any files yet. Tap the button below to start."
+                                    else 
+                                        "No files match your search query."
+                                )
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    contentPadding = PaddingValues(bottom = 80.dp)
+                                ) {
+                                    items(
+                                        items = uiState.displayedFiles,
+                                        key = { it.id ?: it.name ?: it.hashCode() }
+                                    ) { file ->
+                                        FileCard(
+                                            fileName = file.name ?: "Unknown File",
+                                            fileSize = file.getFormattedSize(),
+                                            fileDate = file.getFormattedDate(),
+                                            onDownloadClick = {
+                                                if (file.id != null && file.name != null)
+                                                    viewModel.onAction(
+                                                        FileAction.DownloadFile(
+                                                            file.id,
+                                                            file.name
+                                                        )
                                                     )
-                                                )
-                                        },
-                                        onDeleteClick = {
-                                            fileToDeleteId = file.id
-                                        }
-                                    )
+                                            },
+                                            onDeleteClick = {
+                                                fileToDeleteId = file.id
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
