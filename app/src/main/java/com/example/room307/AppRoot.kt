@@ -11,12 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarDefaults
@@ -36,6 +33,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.example.room307.files.presentation.FileScreen
 import com.example.room307.nodes.presentation.NodeScreen
+import com.example.room307.settings.presentation.SettingsScreen
 import com.example.room307.ui.theme.ROOM307Theme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,15 +77,6 @@ fun AppRoot(
                             )
                         }
                     },
-                    actions = {
-                        IconButton(onClick = onThemeChange) {
-                            Icon(
-                                imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Toggle Theme",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -99,9 +88,9 @@ fun AppRoot(
                     Destination.entries.forEach { destination ->
                         NavigationBarItem(
                             selected = backStack.lastOrNull() == destination.route,
-                            onClick = { 
+                            onClick = {
                                 if (backStack.lastOrNull() != destination.route) {
-                                    backStack.add(destination.route) 
+                                    backStack.add(destination.route)
                                 }
                             },
                             icon = {
@@ -130,6 +119,14 @@ fun AppRoot(
 
                     entry<Screen.Nodes> {
                         NodeScreen(modifier = Modifier.padding(innerPadding))
+                    }
+
+                    entry<Screen.Settings> {
+                        SettingsScreen(
+                            modifier = Modifier.padding(innerPadding),
+                            isDarkTheme = isDarkTheme,
+                            onThemeChange = onThemeChange
+                        )
                     }
                 }
             )
