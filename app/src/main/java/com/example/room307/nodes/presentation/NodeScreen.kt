@@ -7,14 +7,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.room307.ui.EmptyState
+import com.example.room307.ui.ErrorState
 import com.example.room307.ui.SearchBar
 import kotlinx.coroutines.flow.collectLatest
 
@@ -51,20 +55,10 @@ fun NodeScreen(
     Box(modifier = modifier.fillMaxSize()) {
         when (val currentState = state) {
             is NodeState.Error -> {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = currentState.message,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                    TextButton(onClick = { viewModel.onAction(NodeAction.LoadNodes) }) {
-                        Text("Retry")
-                    }
-                }
+                ErrorState(
+                    message = currentState.message,
+                    onRetry = { viewModel.onAction(NodeAction.LoadNodes) }
+                )
             }
 
             is NodeState.Loading -> {
@@ -94,19 +88,37 @@ fun NodeScreen(
                             placeholder = "Search nodes by IP or Port..."
                         )
 
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(bottom = 16.dp)
-                        ) {
-                            items(
-                                items = uiState.displayedNodes,
-                                key = { it.id ?: it.hashCode() }
-                            ) { node ->
-                                NodeCard(
-                                    node = node,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                        if (uiState.displayedNodes.isEmpty()) {
+                            EmptyState(
+                                title = "No nodes found",
+                                message = if (uiState.searchQuery.isEmpty())
+                                    "Your network seems empty. Make sure your nodes are running."
+                                else
+                                    "No nodes match your search query.",
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Dns,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                    )
+                                }
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(bottom = 16.dp)
+                            ) {
+                                items(
+                                    items = uiState.displayedNodes,
+                                    key = { it.id ?: it.hashCode() }
+                                ) { node ->
+                                    NodeCard(
+                                        node = node,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }

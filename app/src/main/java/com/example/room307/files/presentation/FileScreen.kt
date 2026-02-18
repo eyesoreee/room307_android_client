@@ -118,9 +118,9 @@ fun FileScreen(
 
                             if (uiState.displayedFiles.isEmpty()) {
                                 EmptyState(
-                                    message = if (uiState.searchQuery.isEmpty()) 
+                                    message = if (uiState.searchQuery.isEmpty())
                                         "You haven't uploaded any files yet. Tap the button below to start."
-                                    else 
+                                    else
                                         "No files match your search query."
                                 )
                             } else {
