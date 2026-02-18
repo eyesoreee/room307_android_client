@@ -20,7 +20,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -38,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.room307.ui.ErrorState
 import com.example.room307.ui.SearchBar
 import kotlinx.coroutines.flow.collectLatest
 import java.io.File
@@ -84,19 +84,10 @@ fun FileScreen(
         ) {
             when (val currentState = state) {
                 is FileState.Error -> {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = currentState.message,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                        TextButton(onClick = { viewModel.onAction(FileAction.LoadFiles) }) {
-                            Text("Retry")
-                        }
-                    }
+                    ErrorState(
+                        message = currentState.message,
+                        onRetry = { viewModel.onAction(FileAction.LoadFiles) }
+                    )
                 }
 
                 is FileState.Loading -> {
@@ -190,7 +181,7 @@ fun FileScreen(
                         fileToDeleteId = null
                     }
                 ) {
-                    Text(text = "Delete", color = MaterialTheme.colorScheme.error)
+                    Text(text = "Delete")
                 }
             },
             dismissButton = {

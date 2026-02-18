@@ -1,6 +1,7 @@
 package com.example.room307.di
 
 import com.example.room307.files.data.remote.FileApi
+import com.example.room307.nodes.data.remote.NodeApi
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
@@ -45,5 +46,17 @@ object NetworkModule {
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
             .create(FileApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideNodeApi(json: Json, okHttpClient: OkHttpClient): NodeApi {
+        val contentType = "application/json".toMediaType()
+        return Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory(contentType))
+            .build()
+            .create(NodeApi::class.java)
     }
 }

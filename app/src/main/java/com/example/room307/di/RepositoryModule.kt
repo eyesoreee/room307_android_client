@@ -2,6 +2,8 @@ package com.example.room307.di
 
 import com.example.room307.files.data.repository.FileRepositoryImp
 import com.example.room307.files.domain.repository.FileRepository
+import com.example.room307.nodes.data.repository.NodeRepositoryImp
+import com.example.room307.nodes.domain.repository.NodeRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -17,4 +19,10 @@ abstract class RepositoryModule {
     abstract fun bindFileRepo(
         fileRepoImpl: FileRepositoryImp
     ): FileRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindNodeRepo(
+        nodeRepoImpl: NodeRepositoryImp
+    ): NodeRepository
 }

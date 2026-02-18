@@ -2,7 +2,6 @@ package com.example.room307.files.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.room307.files.data.remote.FileDto
 import com.example.room307.files.domain.FileDownloader
 import com.example.room307.files.domain.repository.FileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,26 +13,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
-
-data class FileUiState(
-    val files: List<FileDto> = emptyList(),
-    val displayedFiles: List<FileDto> = emptyList(),
-    val searchQuery: String = "",
-    val uploadProgress: Float? = null,
-    val isRefreshing: Boolean = false,
-    val isDownloading: Boolean = false
-)
-
-sealed interface FileEvent {
-    data class ShowSnackbar(val message: String) : FileEvent
-}
-
-sealed interface FileState {
-    object Idle : FileState
-    object Loading : FileState
-    data class Error(val message: String) : FileState
-    data class Ready(val uiState: FileUiState) : FileState
-}
 
 @HiltViewModel
 class FileViewModel @Inject constructor(
@@ -69,7 +48,12 @@ class FileViewModel @Inject constructor(
                 .onSuccess { result ->
                     updateReadyState { state ->
                         val filtered = if (state.searchQuery.isBlank()) result
-                        else result.filter { it.name?.contains(state.searchQuery, ignoreCase = true) == true }
+                        else result.filter {
+                            it.name?.contains(
+                                state.searchQuery,
+                                ignoreCase = true
+                            ) == true
+                        }
                         state.copy(files = result, displayedFiles = filtered, isRefreshing = false)
                     }
                 }
@@ -99,13 +83,13 @@ class FileViewModel @Inject constructor(
         updateReadyState { it.copy(isRefreshing = true) }
         viewModelScope.launch {
             repository.upload(file)
-                .onSuccess { 
+                .onSuccess {
                     _events.trySend(FileEvent.ShowSnackbar("Upload successful"))
-                    refreshFiles() 
+                    refreshFiles()
                 }
-                .onFailure { e -> 
+                .onFailure { e ->
                     updateReadyState { it.copy(isRefreshing = false) }
-                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Upload failed")) 
+                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Upload failed"))
                 }
         }
     }
@@ -114,13 +98,13 @@ class FileViewModel @Inject constructor(
         updateReadyState { it.copy(isRefreshing = true) }
         viewModelScope.launch {
             repository.delete(fileId)
-                .onSuccess { 
+                .onSuccess {
                     _events.trySend(FileEvent.ShowSnackbar("File deleted"))
-                    refreshFiles() 
+                    refreshFiles()
                 }
-                .onFailure { e -> 
+                .onFailure { e ->
                     updateReadyState { it.copy(isRefreshing = false) }
-                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Delete failed")) 
+                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Delete failed"))
                 }
         }
     }
@@ -135,6 +119,8 @@ class FileViewModel @Inject constructor(
                         updateReadyState { it.copy(isDownloading = false) }
                         if (!success) {
                             _events.trySend(FileEvent.ShowSnackbar("Failed to save file"))
+                        } else {
+                            _events.trySend(FileEvent.ShowSnackbar("File downloaded"))
                         }
                     }
                 }
