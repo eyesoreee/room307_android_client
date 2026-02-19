@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
@@ -30,43 +29,29 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun clearCache() {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                val cacheDir = getApplication<Application>().cacheDir
-                cacheDir.deleteRecursively()
-                cacheDir.mkdirs()
+        viewModelScope.launch(Dispatchers.IO) {
+            getApplication<Application>().cacheDir.apply {
+                deleteRecursively()
+                mkdirs()
             }
-            updateCacheSize()
-        }
-    }
-
-    fun updateCacheSize() {
-        viewModelScope.launch {
-            val size = withContext(Dispatchers.IO) {
-                getFolderSize(getApplication<Application>().cacheDir)
-            }
+            val size = getFolderSize(getApplication<Application>().cacheDir)
             _state.update { it.copy(cacheSize = formatSize(size)) }
         }
     }
 
-    private fun getFolderSize(file: File): Long {
-        var size: Long = 0
-        if (file.isDirectory) {
-            file.listFiles()?.forEach {
-                size += getFolderSize(it)
-            }
-        } else {
-            size = file.length()
+    fun updateCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val size = getFolderSize(getApplication<Application>().cacheDir)
+            _state.update { it.copy(cacheSize = formatSize(size)) }
         }
-        return size
     }
 
-    private fun formatSize(size: Long): String {
-        val s = size.toDouble()
-        return when {
-            s < 1024 -> "$size B"
-            s < 1024 * 1024 -> "%.1f KB".format(s / 1024)
-            else -> "%.1f MB".format(s / (1024 * 1024))
-        }
+    private fun getFolderSize(dir: File): Long =
+        dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    private fun formatSize(size: Long): String = when {
+        size < 1_024 -> "$size B"
+        size < 1_048_576 -> "%.1f KB".format(size / 1_024.0)
+        else -> "%.1f MB".format(size / 1_048_576.0)
     }
 }
