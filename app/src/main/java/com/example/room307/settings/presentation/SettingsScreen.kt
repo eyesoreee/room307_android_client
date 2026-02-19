@@ -18,6 +18,9 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -31,6 +34,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var showServerDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -42,9 +46,9 @@ fun SettingsScreen(
         SettingsGroup(title = "Connection") {
             SettingsItem(
                 icon = Icons.Default.CloudQueue,
-                title = "Server Address",
-                subtitle = "http://192.168.1.189:8001",
-                onClick = {}
+                title = "Server Configuration",
+                subtitle = "Manage IP addresses and Ports",
+                onClick = { showServerDialog = true }
             )
             SettingsItem(
                 icon = Icons.Default.Language,
@@ -59,7 +63,7 @@ fun SettingsScreen(
                 icon = Icons.Default.DeleteSweep,
                 title = "Clear App Cache",
                 subtitle = "Currently using ${state.cacheSize}",
-                onClick = { viewModel.clearCache() }
+                onClick = { viewModel.onAction(SettingsAction.ClearCache) }
             )
             SettingsItem(
                 icon = Icons.Default.Storage,
@@ -95,5 +99,23 @@ fun SettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+    }
+
+    if (showServerDialog) {
+        ServerConfigDialog(
+            configs = state.serverConfigs,
+            onDismiss = { showServerDialog = false },
+            onAdd = { ip, port -> viewModel.onAction(SettingsAction.AddServerConfig(ip, port)) },
+            onEdit = { id, ip, port ->
+                viewModel.onAction(
+                    (SettingsAction.UpdateServerConfig(
+                        id,
+                        ip,
+                        port
+                    ))
+                )
+            },
+            onDelete = { id -> viewModel.onAction(SettingsAction.DeleteServerConfig(id)) }
+        )
     }
 }
