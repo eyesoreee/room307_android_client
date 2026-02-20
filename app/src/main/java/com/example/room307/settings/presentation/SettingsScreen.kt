@@ -34,7 +34,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var showServerDialog by remember { mutableStateOf(false) }
+    var showBootstrapDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -47,8 +47,8 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.CloudQueue,
                 title = "Server Configuration",
-                subtitle = "Manage IP addresses and Ports",
-                onClick = { showServerDialog = true }
+                subtitle = "${state.initialServerConfig.ip}:${state.initialServerConfig.port}",
+                onClick = { showBootstrapDialog = true }
             )
             SettingsItem(
                 icon = Icons.Default.Language,
@@ -101,21 +101,14 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(32.dp))
     }
 
-    if (showServerDialog) {
-        ServerConfigDialog(
-            configs = state.serverConfigs,
-            onDismiss = { showServerDialog = false },
-            onAdd = { ip, port -> viewModel.onAction(SettingsAction.AddServerConfig(ip, port)) },
-            onEdit = { id, ip, port ->
-                viewModel.onAction(
-                    (SettingsAction.UpdateServerConfig(
-                        id,
-                        ip,
-                        port
-                    ))
-                )
-            },
-            onDelete = { id -> viewModel.onAction(SettingsAction.DeleteServerConfig(id)) }
+    if (showBootstrapDialog) {
+        BootstrapNodeDialog(
+            config = ServerConfig(ip = "192.168.1.189", port = "8001"),
+            onDismiss = { showBootstrapDialog = false },
+            onConfirm = { ip, port ->
+                viewModel.onAction(SettingsAction.SetBootstrapConfig(ip, port))
+                showBootstrapDialog = false
+            }
         )
     }
 }

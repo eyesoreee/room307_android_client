@@ -15,7 +15,6 @@ import java.io.File
 import javax.inject.Inject
 
 data class ServerConfig(
-    val id: Long = System.currentTimeMillis(),
     val ip: String,
     val port: String
 )
@@ -23,9 +22,7 @@ data class ServerConfig(
 data class SettingsUiState(
     val cacheSize: String = "0.0 B",
     val downloadPath: String = "",
-    val serverConfigs: List<ServerConfig> = listOf(
-        ServerConfig(ip = "192.168.1.189", port = "8001")
-    )
+    val initialServerConfig: ServerConfig = ServerConfig("192.168.1.189", "8001"),
 )
 
 @HiltViewModel
@@ -38,18 +35,17 @@ class SettingsViewModel @Inject constructor(
 
     init {
         updateCacheSize()
-        val defaultPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+        val defaultPath =
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
         _state.update { it.copy(downloadPath = defaultPath) }
     }
 
     fun onAction(action: SettingsAction) {
         when (action) {
-            SettingsAction.ClearCache -> clearCache()
-            SettingsAction.UpdateCacheSize -> updateCacheSize()
+            is SettingsAction.ClearCache -> clearCache()
+            is SettingsAction.UpdateCacheSize -> updateCacheSize()
             is SettingsAction.SetDownloadPath -> setDownloadPath(action.uri)
-            is SettingsAction.AddServerConfig -> addServerConfig(action.ip, action.port)
-            is SettingsAction.UpdateServerConfig -> updateServerConfig(action.id, action.ip, action.port)
-            is SettingsAction.DeleteServerConfig -> deleteServerConfig(action.id)
+            is SettingsAction.SetBootstrapConfig -> updateServerConfig(action.ip, action.port)
         }
     }
 
@@ -69,7 +65,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun updateCacheSizeInternal() {
+    private fun updateCacheSizeInternal() {
         val size = getFolderSize(getApplication<Application>().cacheDir)
         _state.update { it.copy(cacheSize = formatSize(size)) }
     }
@@ -80,28 +76,10 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private fun addServerConfig(ip: String, port: String) {
+    private fun updateServerConfig(ip: String, port: String) {
         _state.update { currentState ->
             currentState.copy(
-                serverConfigs = currentState.serverConfigs + ServerConfig(ip = ip, port = port)
-            )
-        }
-    }
-
-    private fun updateServerConfig(id: Long, ip: String, port: String) {
-        _state.update { currentState ->
-            currentState.copy(
-                serverConfigs = currentState.serverConfigs.map {
-                    if (it.id == id) it.copy(ip = ip, port = port) else it
-                }
-            )
-        }
-    }
-
-    private fun deleteServerConfig(id: Long) {
-        _state.update { currentState ->
-            currentState.copy(
-                serverConfigs = currentState.serverConfigs.filter { it.id != id }
+                initialServerConfig = ServerConfig(ip, port)
             )
         }
     }
