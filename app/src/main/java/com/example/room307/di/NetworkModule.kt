@@ -16,7 +16,7 @@ import retrofit2.Retrofit
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val BASE_URL = "http://192.168.1.189:8001/"
+    private const val BASE_URL = "http://localhost/"
 
     @Provides
     @Singleton
@@ -30,9 +30,9 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(failoverInterceptor: FailoverInterceptor): OkHttpClient {
         return OkHttpClient.Builder()
-            .addInterceptor(FailoverInterceptor())
+            .addInterceptor(failoverInterceptor)
             .build()
     }
 

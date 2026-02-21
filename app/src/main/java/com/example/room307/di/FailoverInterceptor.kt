@@ -5,26 +5,31 @@ import okhttp3.Interceptor
 import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class FailoverInterceptor : Interceptor {
-    companion object {
-        private val nodeUrls = listOf(
-            "http://192.168.1.189:8001/",
-            "http://192.168.1.189:8002/",
-            "http://192.168.1.189:8003/"
-        )
-    }
+@Singleton
+class FailoverInterceptor @Inject constructor(
+    private val nodeUrlManager: NodeUrlManager
+) : Interceptor {
 
     private val lastGoodIndex = AtomicInteger(0)
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        var lastException: IOException? = null
 
+        val urlsToTry = nodeUrlManager.urlsToTry.value
+
+        if (urlsToTry.isEmpty()) {
+            throw IOException("No server nodes available. Please configure in settings.")
+        }
+
+        var lastException: IOException? = null
         val startFrom = lastGoodIndex.get()
-        for (i in nodeUrls.indices) {
-            val current = (startFrom + i) % nodeUrls.size
-            val url = nodeUrls[current]
+
+        for (i in urlsToTry.indices) {
+            val current = (startFrom + i) % urlsToTry.size
+            val url = urlsToTry[current]
 
             try {
                 val newBaseUrl = url.toHttpUrlOrNull() ?: continue
@@ -37,6 +42,7 @@ class FailoverInterceptor : Interceptor {
                 val newRequest = request.newBuilder()
                     .url(newUrl)
                     .build()
+
                 val response = chain.proceed(newRequest)
                 lastGoodIndex.set(current)
                 return response
@@ -46,6 +52,6 @@ class FailoverInterceptor : Interceptor {
             }
         }
 
-        throw lastException ?: IOException("All nodes are unreachable")
+        throw lastException ?: IOException("All configured nodes are unreachable.")
     }
 }

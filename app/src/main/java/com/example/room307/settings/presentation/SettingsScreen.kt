@@ -103,7 +103,10 @@ fun SettingsScreen(
 
     if (showBootstrapDialog) {
         BootstrapNodeDialog(
-            config = ServerConfig(ip = "192.168.1.189", port = "8001"),
+            config = state.initialServerConfig,
+            testResult = state.testResult,
+            onTest = { ip, port -> viewModel.onAction(SettingsAction.TestConnection(ip, port)) },
+            onResetTest = { viewModel.onAction(SettingsAction.ResetTestResult) },
             onDismiss = { showBootstrapDialog = false },
             onConfirm = { ip, port ->
                 viewModel.onAction(SettingsAction.SetBootstrapConfig(ip, port))
