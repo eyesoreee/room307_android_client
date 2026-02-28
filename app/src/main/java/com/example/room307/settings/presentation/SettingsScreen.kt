@@ -85,11 +85,14 @@ fun SettingsScreen(
                 checked = isDarkTheme,
                 onCheckedChange = { onThemeChange() }
             )
-            SettingsItem(
+            SettingsToggleItem(
                 icon = Icons.Default.Palette,
                 title = "Dynamic Colors",
                 subtitle = "Sync with system wallpaper colors",
-                onClick = {}
+                checked = state.dynamicColors,
+                onCheckedChange = { enabled -> 
+                    viewModel.onAction(SettingsAction.ToggleDynamicColors(enabled))
+                }
             )
         }
 

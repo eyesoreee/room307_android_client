@@ -41,11 +41,15 @@ import com.example.room307.ui.theme.ROOM307Theme
 fun AppRoot(
     modifier: Modifier = Modifier,
     onThemeChange: () -> Unit,
-    isDarkTheme: Boolean
+    isDarkTheme: Boolean,
+    useDynamicColors: Boolean
 ) {
     val backStack = remember { mutableStateListOf<Screen>(Screen.Files) }
 
-    ROOM307Theme(darkTheme = isDarkTheme) {
+    ROOM307Theme(
+        darkTheme = isDarkTheme,
+        dynamicColor = useDynamicColors
+    ) {
         Scaffold(
             topBar = {
                 TopAppBar(

@@ -10,4 +10,5 @@ sealed interface SettingsAction {
     data class TestConnection(val ip: String, val port: String) : SettingsAction
     data object ResetTestResult : SettingsAction
     data class UpdateSyncFrequency(val minutes: Int) : SettingsAction
+    data class ToggleDynamicColors(val enabled: Boolean) : SettingsAction
 }

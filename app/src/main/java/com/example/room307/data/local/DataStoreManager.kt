@@ -1,6 +1,7 @@
 package com.example.room307.data.local
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -21,6 +22,7 @@ class DataStoreManager @Inject constructor(
         private val BOOTSTRAP_KEY = stringPreferencesKey("bootstrap_config")
         private val SYNC_FREQUENCY_KEY = intPreferencesKey("sync_frequency")
         private val DOWNLOAD_PATH_KEY = stringPreferencesKey("download_path")
+        private val DYNAMIC_COLORS_KEY = booleanPreferencesKey("dynamic_colors")
     }
 
     val serverAddress: Flow<String?> = context.dataStore.data
@@ -31,6 +33,9 @@ class DataStoreManager @Inject constructor(
 
     val downloadPath: Flow<String?> = context.dataStore.data
         .map { preferences -> preferences[DOWNLOAD_PATH_KEY] }
+
+    val dynamicColors: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[DYNAMIC_COLORS_KEY] ?: true }
 
     suspend fun updateServerAddress(address: String) {
         context.dataStore.edit { preferences ->
@@ -47,6 +52,12 @@ class DataStoreManager @Inject constructor(
     suspend fun updateDownloadPath(path: String) {
         context.dataStore.edit { preferences ->
             preferences[DOWNLOAD_PATH_KEY] = path
+        }
+    }
+
+    suspend fun updateDynamicColors(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[DYNAMIC_COLORS_KEY] = enabled
         }
     }
 }
