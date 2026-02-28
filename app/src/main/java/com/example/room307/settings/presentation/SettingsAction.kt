@@ -9,4 +9,5 @@ sealed interface SettingsAction {
     data class SetBootstrapConfig(val ip: String, val port: String) : SettingsAction
     data class TestConnection(val ip: String, val port: String) : SettingsAction
     data object ResetTestResult : SettingsAction
+    data class UpdateSyncFrequency(val minutes: Int) : SettingsAction
 }

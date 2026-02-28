@@ -35,6 +35,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showBootstrapDialog by remember { mutableStateOf(false) }
+    var showSyncFrequencyDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -50,11 +51,13 @@ fun SettingsScreen(
                 subtitle = "${state.initialServerConfig.ip}:${state.initialServerConfig.port}",
                 onClick = { showBootstrapDialog = true }
             )
+            
+            val frequencyText = if (state.syncFrequency == 60) "Every hour" else "Every ${state.syncFrequency} minutes"
             SettingsItem(
                 icon = Icons.Default.Language,
                 title = "Node Sync Frequency",
-                subtitle = "Every 5 minutes",
-                onClick = {}
+                subtitle = frequencyText,
+                onClick = { showSyncFrequencyDialog = true }
             )
         }
 
@@ -111,6 +114,17 @@ fun SettingsScreen(
             onConfirm = { ip, port ->
                 viewModel.onAction(SettingsAction.SetBootstrapConfig(ip, port))
                 showBootstrapDialog = false
+            }
+        )
+    }
+
+    if (showSyncFrequencyDialog) {
+        SyncFrequencyDialog(
+            currentFrequency = state.syncFrequency,
+            onDismiss = { showSyncFrequencyDialog = false },
+            onConfirm = { minutes ->
+                viewModel.onAction(SettingsAction.UpdateSyncFrequency(minutes))
+                showSyncFrequencyDialog = false
             }
         )
     }

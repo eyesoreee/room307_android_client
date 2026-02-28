@@ -33,6 +33,7 @@ data class SettingsUiState(
     val cacheSize: String = "0.0 B",
     val downloadPath: String = "",
     val initialServerConfig: ServerConfig = ServerConfig("192.168.1.189", "8001"),
+    val syncFrequency: Int = 5,
     val testResult: TestResult = TestResult.Idle
 )
 
@@ -64,6 +65,12 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+
+        viewModelScope.launch {
+            dataStoreManager.syncFrequency.collect { frequency ->
+                _state.update { it.copy(syncFrequency = frequency) }
+            }
+        }
     }
 
     fun onAction(action: SettingsAction) {
@@ -74,6 +81,7 @@ class SettingsViewModel @Inject constructor(
             is SettingsAction.SetBootstrapConfig -> updateServerConfig(action.ip, action.port)
             is SettingsAction.TestConnection -> testConnection(action.ip, action.port)
             is SettingsAction.ResetTestResult -> _state.update { it.copy(testResult = TestResult.Idle) }
+            is SettingsAction.UpdateSyncFrequency -> updateSyncFrequency(action.minutes)
         }
     }
 
@@ -87,6 +95,12 @@ class SettingsViewModel @Inject constructor(
                 .onFailure { error ->
                     _state.update { it.copy(testResult = TestResult.Error(error.message ?: "Test failed")) }
                 }
+        }
+    }
+
+    private fun updateSyncFrequency(minutes: Int) {
+        viewModelScope.launch {
+            dataStoreManager.updateSyncFrequency(minutes)
         }
     }
 

@@ -2,6 +2,7 @@ package com.example.room307.data.local
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,14 +19,24 @@ class DataStoreManager @Inject constructor(
 ) {
     companion object {
         private val BOOTSTRAP_KEY = stringPreferencesKey("bootstrap_config")
+        private val SYNC_FREQUENCY_KEY = intPreferencesKey("sync_frequency")
     }
 
     val serverAddress: Flow<String?> = context.dataStore.data
         .map { preferences -> preferences[BOOTSTRAP_KEY] }
 
+    val syncFrequency: Flow<Int> = context.dataStore.data
+        .map { preferences -> preferences[SYNC_FREQUENCY_KEY] ?: 5 }
+
     suspend fun updateServerAddress(address: String) {
         context.dataStore.edit { preferences ->
             preferences[BOOTSTRAP_KEY] = if (address.endsWith("/")) address else "$address/"
+        }
+    }
+
+    suspend fun updateSyncFrequency(minutes: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[SYNC_FREQUENCY_KEY] = minutes
         }
     }
 }
