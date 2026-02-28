@@ -36,6 +36,7 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showBootstrapDialog by remember { mutableStateOf(false) }
     var showSyncFrequencyDialog by remember { mutableStateOf(false) }
+    var showDownloadPathDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -71,8 +72,8 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Storage,
                 title = "Default Download Path",
-                subtitle = "/Internal storage/Download",
-                onClick = {}
+                subtitle = "Downloads/${state.downloadPath}",
+                onClick = { showDownloadPathDialog = true }
             )
         }
 
@@ -125,6 +126,17 @@ fun SettingsScreen(
             onConfirm = { minutes ->
                 viewModel.onAction(SettingsAction.UpdateSyncFrequency(minutes))
                 showSyncFrequencyDialog = false
+            }
+        )
+    }
+
+    if (showDownloadPathDialog) {
+        DownloadPathDialog(
+            currentPath = state.downloadPath,
+            onDismiss = { showDownloadPathDialog = false },
+            onConfirm = { path ->
+                viewModel.onAction(SettingsAction.SetDownloadPath(path))
+                showDownloadPathDialog = false
             }
         )
     }

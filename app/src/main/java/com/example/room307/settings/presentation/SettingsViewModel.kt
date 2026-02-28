@@ -1,8 +1,6 @@
 package com.example.room307.settings.presentation
 
 import android.app.Application
-import android.net.Uri
-import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.room307.data.local.DataStoreManager
@@ -12,6 +10,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -31,7 +30,7 @@ sealed interface TestResult {
 
 data class SettingsUiState(
     val cacheSize: String = "0.0 B",
-    val downloadPath: String = "",
+    val downloadPath: String = "ROOM307",
     val initialServerConfig: ServerConfig = ServerConfig("192.168.1.189", "8001"),
     val syncFrequency: Int = 5,
     val testResult: TestResult = TestResult.Idle
@@ -50,17 +49,22 @@ class SettingsViewModel @Inject constructor(
 
     init {
         updateCacheSize()
-        val defaultPath =
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
-        _state.update { it.copy(downloadPath = defaultPath) }
 
         viewModelScope.launch {
             dataStoreManager.serverAddress.collect { address ->
                 address?.let { url ->
-                    val cleanUrl = url.removePrefix("http://").removePrefix("https://").removeSuffix("/")
+                    val cleanUrl =
+                        url.removePrefix("http://").removePrefix("https://").removeSuffix("/")
                     val parts = cleanUrl.split(":")
                     if (parts.size >= 2) {
-                        _state.update { it.copy(initialServerConfig = ServerConfig(parts[0], parts[1])) }
+                        _state.update {
+                            it.copy(
+                                initialServerConfig = ServerConfig(
+                                    parts[0],
+                                    parts[1]
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -71,13 +75,19 @@ class SettingsViewModel @Inject constructor(
                 _state.update { it.copy(syncFrequency = frequency) }
             }
         }
+
+        viewModelScope.launch {
+            dataStoreManager.downloadPath.collect { path ->
+                _state.update { it.copy(downloadPath = path ?: "ROOM307") }
+            }
+        }
     }
 
     fun onAction(action: SettingsAction) {
         when (action) {
             is SettingsAction.ClearCache -> clearCache()
             is SettingsAction.UpdateCacheSize -> updateCacheSize()
-            is SettingsAction.SetDownloadPath -> setDownloadPath(action.uri)
+            is SettingsAction.SetDownloadPath -> setDownloadPath(action.path)
             is SettingsAction.SetBootstrapConfig -> updateServerConfig(action.ip, action.port)
             is SettingsAction.TestConnection -> testConnection(action.ip, action.port)
             is SettingsAction.ResetTestResult -> _state.update { it.copy(testResult = TestResult.Idle) }
@@ -93,7 +103,13 @@ class SettingsViewModel @Inject constructor(
                     _state.update { it.copy(testResult = TestResult.Success(count)) }
                 }
                 .onFailure { error ->
-                    _state.update { it.copy(testResult = TestResult.Error(error.message ?: "Test failed")) }
+                    _state.update {
+                        it.copy(
+                            testResult = TestResult.Error(
+                                error.message ?: "Test failed"
+                            )
+                        )
+                    }
                 }
         }
     }
@@ -125,17 +141,19 @@ class SettingsViewModel @Inject constructor(
         _state.update { it.copy(cacheSize = formatSize(size)) }
     }
 
-    private fun setDownloadPath(uri: Uri?) {
-        uri?.let {
-            _state.update { it.copy(downloadPath = uri.toString()) }
+    private fun setDownloadPath(path: String) {
+        viewModelScope.launch {
+            dataStoreManager.updateDownloadPath(path)
         }
     }
 
     private fun updateServerConfig(ip: String, port: String) {
         viewModelScope.launch {
             nodeUrlManager.clearDiscovered()
-            val address = "http://$ip:$port/"
+            val targetIp = if (ip == "localhost" || ip == "127.0.0.1") "10.0.2.2" else ip
+            val address = "http://$targetIp:$port/"
             dataStoreManager.updateServerAddress(address)
+            nodeUrlManager.urlsToTry.first { it.contains(address) }
             nodeRepository.getAllNodes()
         }
     }

@@ -20,6 +20,7 @@ class NodeRepositoryImp @Inject constructor(
     private val json: Json,
     private val okHttpClient: OkHttpClient
 ) : NodeRepository {
+
     override suspend fun getAllNodes(): Result<List<NodeDto>> {
         return try {
             val response = api.getAllNodes()
@@ -42,7 +43,7 @@ class NodeRepositoryImp @Inject constructor(
         val baseUrl = "http://$targetIp:$port/"
 
         return try {
-            val cleanClient = okHttpClient.newBuilder()
+            val cleanClient = OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
@@ -66,7 +67,12 @@ class NodeRepositoryImp @Inject constructor(
         } catch (e: SocketTimeoutException) {
             Result.failure(Exception("Timeout. Check your IP and Firewall."))
         } catch (e: Exception) {
-            Result.failure(Exception(e.localizedMessage ?: "Connection failed"))
+            val message = if (e.message?.contains("No server nodes available") == true) {
+                "Internal error: Interceptor blocked the test."
+            } else {
+                e.localizedMessage ?: "Connection failed"
+            }
+            Result.failure(Exception(message))
         }
     }
 }

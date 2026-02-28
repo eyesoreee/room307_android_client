@@ -20,6 +20,7 @@ class DataStoreManager @Inject constructor(
     companion object {
         private val BOOTSTRAP_KEY = stringPreferencesKey("bootstrap_config")
         private val SYNC_FREQUENCY_KEY = intPreferencesKey("sync_frequency")
+        private val DOWNLOAD_PATH_KEY = stringPreferencesKey("download_path")
     }
 
     val serverAddress: Flow<String?> = context.dataStore.data
@@ -27,6 +28,9 @@ class DataStoreManager @Inject constructor(
 
     val syncFrequency: Flow<Int> = context.dataStore.data
         .map { preferences -> preferences[SYNC_FREQUENCY_KEY] ?: 5 }
+
+    val downloadPath: Flow<String?> = context.dataStore.data
+        .map { preferences -> preferences[DOWNLOAD_PATH_KEY] }
 
     suspend fun updateServerAddress(address: String) {
         context.dataStore.edit { preferences ->
@@ -37,6 +41,12 @@ class DataStoreManager @Inject constructor(
     suspend fun updateSyncFrequency(minutes: Int) {
         context.dataStore.edit { preferences ->
             preferences[SYNC_FREQUENCY_KEY] = minutes
+        }
+    }
+
+    suspend fun updateDownloadPath(path: String) {
+        context.dataStore.edit { preferences ->
+            preferences[DOWNLOAD_PATH_KEY] = path
         }
     }
 }
