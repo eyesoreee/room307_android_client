@@ -31,7 +31,7 @@ class NodeUrlManager @Inject constructor(
         dataStoreManager.serverAddress,
         _discoveredUrls
     ) { bootstrap, discovered ->
-        (discovered + bootstrap).filterNotNull().distinct()
+        (listOfNotNull(bootstrap) + discovered).distinct()
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     fun startSyncLoop(onSync: suspend () -> Unit) {

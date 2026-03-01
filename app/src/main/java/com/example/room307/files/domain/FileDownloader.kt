@@ -34,11 +34,8 @@ class FileDownloader @Inject constructor(
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            channelId,
-            "File Downloads",
-            NotificationManager.IMPORTANCE_DEFAULT
-        )
+        val channel =
+            NotificationChannel(channelId, "File Downloads", NotificationManager.IMPORTANCE_DEFAULT)
         notificationManager.createNotificationChannel(channel)
     }
 
@@ -46,124 +43,130 @@ class FileDownloader @Inject constructor(
         withContext(Dispatchers.IO) {
             val uniqueFileName = getUniqueFileName(filename)
             val notificationId = filename.hashCode()
-
-            val builder = NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle("Downloading $filename")
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setProgress(100, 0, true)
-
-            notificationManager.notify(notificationId, builder.build())
+            val builder = createProgressNotification(filename)
 
             try {
-                val customFolderName = (dataStoreManager.downloadPath.first() ?: "ROOM307").trim()
-                val mimeType = getMimeType(filename)
+                notificationManager.notify(notificationId, builder.build())
 
-                val outputStream: OutputStream?
-                val resolver = context.contentResolver
+                val folderName = (dataStoreManager.downloadPath.first() ?: "ROOM307").trim()
+                val outputStream = getOutputStream(uniqueFileName, folderName)
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/$customFolderName"
-
-                    val contentValues = ContentValues().apply {
-                        put(MediaStore.MediaColumns.DISPLAY_NAME, uniqueFileName)
-                        put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                        put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                if (outputStream != null) {
+                    val success = writeStream(body, outputStream) { progress ->
+                        notificationManager.notify(
+                            notificationId,
+                            builder.setProgress(100, progress, false).build()
+                        )
                     }
 
-                    val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
-                    val uri = resolver.insert(collection, contentValues)
-
-                    outputStream = uri?.let { resolver.openOutputStream(it) }
-
-                    if (outputStream != null) {
-                        writeFile(body, outputStream, builder, notificationId)
-
-                        contentValues.clear()
-                        contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                        resolver.update(uri, contentValues, null, null)
-
-                        showFinishedNotification(notificationId, filename, true)
-                        return@withContext true
-                    }
+                    finalizeDownload(uniqueFileName, folderName)
+                    showFinishedNotification(notificationId, filename, success)
+                    success
                 } else {
-                    // Legacy API 27, 28
-                    val baseDir =
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    val targetDir = File(baseDir, customFolderName)
-                    if (!targetDir.exists()) targetDir.mkdirs()
-
-                    val targetFile = File(targetDir, uniqueFileName)
-                    outputStream = FileOutputStream(targetFile)
-
-                    writeFile(body, outputStream, builder, notificationId)
-                    showFinishedNotification(notificationId, filename, true)
-                    return@withContext true
+                    showFinishedNotification(notificationId, filename, false)
+                    false
                 }
-
-                showFinishedNotification(notificationId, filename, false)
-                false
             } catch (e: Exception) {
-                Log.e("FileDownloader", "Error saving file", e)
+                Log.e("FileDownloader", "Download failed: $filename", e)
                 showFinishedNotification(notificationId, filename, false)
                 false
             }
         }
 
-    private fun writeFile(
+    private fun getOutputStream(fileName: String, folderName: String): OutputStream? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(fileName))
+                put(
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                    "${Environment.DIRECTORY_DOWNLOADS}/$folderName"
+                )
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri =
+                context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            uri?.let { context.contentResolver.openOutputStream(it) }
+        } else {
+            val dir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                folderName
+            )
+            if (!dir.exists()) dir.mkdirs()
+            FileOutputStream(File(dir, fileName))
+        }
+    }
+
+    private fun writeStream(
         body: ResponseBody,
         outputStream: OutputStream,
-        builder: NotificationCompat.Builder,
-        notificationId: Int
-    ) {
-        val inputStream = body.byteStream()
-        val totalBytes = body.contentLength()
-        var bytesDownloaded = 0L
-        val buffer = ByteArray(8192)
+        onProgress: (Int) -> Unit
+    ): Boolean {
+        return try {
+            body.byteStream().use { input ->
+                outputStream.use { output ->
+                    val buffer = ByteArray(8192)
+                    val totalBytes = body.contentLength()
+                    var bytesRead: Int
+                    var bytesDownloaded = 0L
 
-        inputStream.use { input ->
-            outputStream.use { output ->
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    output.write(buffer, 0, bytesRead)
-                    bytesDownloaded += bytesRead
-
-                    if (totalBytes > 0) {
-                        val progress = (bytesDownloaded * 100 / totalBytes).toInt()
-                        builder.setProgress(100, progress, false)
-                        notificationManager.notify(notificationId, builder.build())
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        bytesDownloaded += bytesRead
+                        if (totalBytes > 0) {
+                            onProgress((bytesDownloaded * 100 / totalBytes).toInt())
+                        }
                     }
                 }
             }
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 
-    private fun getUniqueFileName(filename: String): String {
-        val name = filename.substringBeforeLast('.')
-        val extension = filename.substringAfterLast('.', "")
-        val timestamp = System.currentTimeMillis() / 1000
-        return if (extension.isNotEmpty()) "${name}_$timestamp.$extension" else "${name}_$timestamp"
+    private fun finalizeDownload(fileName: String, folderName: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val selection =
+                "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+            val args = arrayOf(fileName, "${Environment.DIRECTORY_DOWNLOADS}/$folderName")
+            val values = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+            context.contentResolver.update(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                values,
+                selection,
+                args
+            )
+        }
     }
 
-    private fun getMimeType(filename: String): String {
-        val extension = filename.substringAfterLast('.', "")
-        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
-            ?: "application/octet-stream"
-    }
+    private fun createProgressNotification(filename: String) =
+        NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("Downloading $filename")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setProgress(100, 0, true)
 
     private fun showFinishedNotification(id: Int, filename: String, success: Boolean) {
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(if (success) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
             .setContentTitle(if (success) "Download Complete" else "Download Failed")
             .setContentText(filename)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-            .setOngoing(false)
-            .setProgress(0, 0, false)
             .build()
         notificationManager.notify(id, notification)
     }
+
+    private fun getUniqueFileName(filename: String): String {
+        val name = filename.substringBeforeLast('.')
+        val ext = filename.substringAfterLast('.', "")
+        val ts = System.currentTimeMillis() / 1000
+        return if (ext.isNotEmpty()) "${name}_$ts.$ext" else "${name}_$ts"
+    }
+
+    private fun getMimeType(filename: String): String = MimeTypeMap.getSingleton()
+        .getMimeTypeFromExtension(filename.substringAfterLast('.', ""))
+        ?: "application/octet-stream"
 }
