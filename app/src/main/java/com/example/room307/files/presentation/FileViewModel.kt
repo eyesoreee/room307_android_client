@@ -32,52 +32,47 @@ class FileViewModel @Inject constructor(
 
     fun onAction(action: FileAction) {
         when (action) {
-            is FileAction.LoadFiles -> loadFiles()
+            FileAction.LoadFiles -> loadFiles()
             is FileAction.SearchFiles -> searchFiles(action.query)
             is FileAction.DownloadFile -> downloadFile(action.fileId, action.fileName)
             is FileAction.DeleteFile -> deleteFile(action.fileId)
             is FileAction.UploadFile -> uploadFile(action.file)
-            is FileAction.RefreshFiles -> refreshFiles()
+            FileAction.RefreshFiles -> refreshFiles()
         }
     }
 
-    private fun refreshFiles() {
-        updateReadyState { it.copy(isRefreshing = true) }
-        viewModelScope.launch {
-            repository.getAll()
-                .onSuccess { result ->
-                    updateReadyState { state ->
-                        val filtered = if (state.searchQuery.isBlank()) result
-                        else result.filter {
-                            it.name?.contains(
-                                state.searchQuery,
-                                ignoreCase = true
-                            ) == true
-                        }
-                        state.copy(files = result, displayedFiles = filtered, isRefreshing = false)
-                    }
-                }
-                .onFailure { e ->
-                    updateReadyState { it.copy(isRefreshing = false) }
-                    _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Refresh failed"))
-                }
-        }
-    }
+    private fun loadFiles(isRefreshing: Boolean = false) {
+        if (!isRefreshing) _state.update { FileState.Loading }
+        else updateReadyState { it.copy(isRefreshing = true) }
 
-    private fun loadFiles() {
-        _state.update { FileState.Loading }
         viewModelScope.launch {
             repository.getAll()
                 .onSuccess { files ->
-                    _state.update {
-                        FileState.Ready(FileUiState(files = files, displayedFiles = files))
+                    _state.update { current ->
+                        val searchQuery = (current as? FileState.Ready)?.uiState?.searchQuery ?: ""
+                        val filtered = if (searchQuery.isBlank()) files
+                        else files.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                        
+                        FileState.Ready(FileUiState(
+                            files = files,
+                            displayedFiles = filtered,
+                            searchQuery = searchQuery,
+                            isRefreshing = false
+                        ))
                     }
                 }
                 .onFailure { e ->
-                    _state.update { FileState.Error(e.message ?: "Failed to load files") }
+                    if (isRefreshing) {
+                        updateReadyState { it.copy(isRefreshing = false) }
+                        _events.trySend(FileEvent.ShowSnackbar(e.message ?: "Refresh failed"))
+                    } else {
+                        _state.update { FileState.Error(e.message ?: "Failed to load files") }
+                    }
                 }
         }
     }
+
+    private fun refreshFiles() = loadFiles(isRefreshing = true)
 
     private fun uploadFile(file: File) {
         updateReadyState { it.copy(isRefreshing = true) }
@@ -114,15 +109,10 @@ class FileViewModel @Inject constructor(
         viewModelScope.launch {
             repository.download(fileId)
                 .onSuccess { body ->
-                    viewModelScope.launch {
-                        val success = fileDownloader.saveFileToDisk(filename, body)
-                        updateReadyState { it.copy(isDownloading = false) }
-                        if (!success) {
-                            _events.trySend(FileEvent.ShowSnackbar("Failed to save file"))
-                        } else {
-                            _events.trySend(FileEvent.ShowSnackbar("File downloaded"))
-                        }
-                    }
+                    val success = fileDownloader.saveFileToDisk(filename, body)
+                    updateReadyState { it.copy(isDownloading = false) }
+                    val message = if (success) "File downloaded" else "Failed to save file"
+                    _events.trySend(FileEvent.ShowSnackbar(message))
                 }
                 .onFailure { e ->
                     updateReadyState { it.copy(isDownloading = false) }
@@ -134,7 +124,7 @@ class FileViewModel @Inject constructor(
     private fun searchFiles(query: String) {
         updateReadyState { current ->
             val filtered = if (query.isBlank()) current.files
-            else current.files.filter { it.name?.contains(query, ignoreCase = true) == true }
+            else current.files.filter { it.name.contains(query, ignoreCase = true) }
             current.copy(searchQuery = query, displayedFiles = filtered)
         }
     }

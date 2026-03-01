@@ -39,48 +39,48 @@ class NodeViewModel @Inject constructor(
         }
     }
 
-    private fun refreshNodes() {
-        updateReadyState { it.copy(isRefreshing = true) }
+    private fun loadNodes(isRefreshing: Boolean = false) {
+        if (!isRefreshing) _state.update { NodeState.Loading }
+        else updateReadyState { it.copy(isRefreshing = true) }
+
         viewModelScope.launch {
             repository.getAllNodes()
                 .onSuccess { nodes ->
-                    updateReadyState { state ->
-                        val filtered = if (state.searchQuery.isBlank()) nodes
+                    _state.update { current ->
+                        val searchQuery = (current as? NodeState.Ready)?.uiState?.searchQuery ?: ""
+                        val filtered = if (searchQuery.isBlank()) nodes
                         else nodes.filter {
-                            it.ip?.contains(state.searchQuery, ignoreCase = true) == true ||
-                                    it.port?.toString()?.contains(state.searchQuery, ignoreCase = true) == true
+                            it.ip.contains(searchQuery, ignoreCase = true) ||
+                                    it.port.toString().contains(searchQuery, ignoreCase = true)
                         }
-                        state.copy(nodes = nodes, displayedNodes = filtered, isRefreshing = false)
+                        
+                        NodeState.Ready(NodeUIState(
+                            nodes = nodes,
+                            displayedNodes = filtered,
+                            searchQuery = searchQuery,
+                            isRefreshing = false
+                        ))
                     }
                 }
                 .onFailure { e ->
-                    updateReadyState { it.copy(isRefreshing = false) }
-                    _events.trySend(NodeEvent.ShowSnackbar(e.message ?: "Refresh failed"))
+                    if (isRefreshing) {
+                        updateReadyState { it.copy(isRefreshing = false) }
+                        _events.trySend(NodeEvent.ShowSnackbar(e.message ?: "Refresh failed"))
+                    } else {
+                        _state.update { NodeState.Error(e.message ?: "Failed to load nodes") }
+                    }
                 }
         }
     }
 
-    private fun loadNodes() {
-        _state.update { NodeState.Loading }
-        viewModelScope.launch {
-            repository.getAllNodes()
-                .onSuccess { nodes ->
-                    _state.update {
-                        NodeState.Ready(NodeUIState(nodes = nodes, displayedNodes = nodes))
-                    }
-                }
-                .onFailure { e ->
-                    _state.update { NodeState.Error(e.message ?: "Failed to load nodes") }
-                }
-        }
-    }
+    private fun refreshNodes() = loadNodes(isRefreshing = true)
 
     private fun searchNodes(query: String) {
         updateReadyState { current ->
             val filtered = if (query.isBlank()) current.nodes
             else current.nodes.filter {
-                it.ip?.contains(query, ignoreCase = true) == true ||
-                        it.port?.toString()?.contains(query, ignoreCase = true) == true
+                it.ip.contains(query, ignoreCase = true) ||
+                        it.port.toString().contains(query, ignoreCase = true)
             }
             current.copy(searchQuery = query, displayedNodes = filtered)
         }
