@@ -79,86 +79,77 @@ fun FileScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            when (val currentState = state) {
-                is FileState.Error -> {
+        when (val currentState = state) {
+            is FileState.Error -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     ErrorState(
                         message = currentState.message,
                         onRetry = { viewModel.onAction(FileAction.LoadFiles) }
                     )
                 }
+            }
 
-                is FileState.Loading -> {
+            is FileState.Loading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            }
 
-                is FileState.Ready -> {
-                    val uiState = currentState.uiState
+            is FileState.Ready -> {
+                val uiState = currentState.uiState
 
-                    PullToRefreshBox(
-                        modifier = Modifier.fillMaxSize(),
-                        isRefreshing = uiState.isRefreshing,
-                        onRefresh = { viewModel.onAction(FileAction.RefreshFiles) }
+                PullToRefreshBox(
+                    modifier = Modifier.fillMaxSize(),
+                    isRefreshing = uiState.isRefreshing,
+                    onRefresh = { viewModel.onAction(FileAction.RefreshFiles) }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp, vertical = 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            SearchBar(
-                                searchQuery = uiState.searchQuery,
-                                onSearchQueryChanged = onSearchQueryChanged,
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = "Search global files..."
-                            )
+                        SearchBar(
+                            searchQuery = uiState.searchQuery,
+                            onSearchQueryChanged = onSearchQueryChanged,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = "Search global files..."
+                        )
 
-                            if (uiState.displayedFiles.isEmpty()) {
-                                EmptyState(
-                                    message = if (uiState.searchQuery.isEmpty())
-                                        "You haven't uploaded any files yet. Tap the button below to start."
-                                    else
-                                        "No files match your search query."
-                                )
-                            } else {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                    contentPadding = PaddingValues(bottom = 80.dp)
-                                ) {
-                                    items(
-                                        items = uiState.displayedFiles,
-                                        key = { it.id ?: it.name ?: it.hashCode() }
-                                    ) { file ->
-                                        FileCard(
-                                            fileName = file.name ?: "Unknown File",
-                                            fileSize = file.getFormattedSize(),
-                                            fileDate = file.getFormattedDate(),
-                                            onDownloadClick = {
-                                                if (file.id != null && file.name != null)
-                                                    viewModel.onAction(
-                                                        FileAction.DownloadFile(
-                                                            file.id,
-                                                            file.name
-                                                        )
-                                                    )
-                                            },
-                                            onDeleteClick = {
-                                                fileToDeleteId = file.id
-                                            }
-                                        )
-                                    }
+                        if (uiState.displayedFiles.isEmpty()) {
+                            EmptyState(
+                                message = if (uiState.searchQuery.isEmpty())
+                                    "You haven't uploaded any files yet. Tap the button below to start."
+                                else
+                                    "No files match your search query."
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(bottom = 80.dp)
+                            ) {
+                                items(
+                                    items = uiState.displayedFiles,
+                                    key = { it.id }
+                                ) { file ->
+                                    FileCard(
+                                        file = file,
+                                        onDownloadClick = {
+                                            viewModel.onAction(FileAction.DownloadFile(file.id, file.name))
+                                        },
+                                        onDeleteClick = {
+                                            fileToDeleteId = file.id
+                                        }
+                                    )
                                 }
                             }
                         }
                     }
                 }
-
-                else -> {}
             }
+
+            else -> {}
         }
 
         FloatingActionButton(

@@ -33,12 +33,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.room307.nodes.data.remote.NodeDto
 import com.example.room307.nodes.data.remote.NodeStatus
+import com.example.room307.nodes.domain.model.NodeItem
 
 @Composable
 fun NodeCard(
-    node: NodeDto,
+    node: NodeItem,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -84,12 +84,12 @@ fun NodeCard(
                 StatItem(
                     icon = Icons.Default.Speed,
                     label = "Latency",
-                    value = node.getFormattedLatency()
+                    value = node.formattedLatency
                 )
                 StatItem(
                     icon = Icons.Default.Memory,
                     label = "Uptime",
-                    value = node.getFormattedUptime()
+                    value = node.formattedUptime
                 )
             }
 
@@ -104,21 +104,21 @@ fun NodeCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = node.getFormattedDiskUsage(),
+                        text = node.formattedDiskUsage,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
                 LinearProgressIndicator(
-                    progress = { node.getDiskUsagePercentage() },
+                    progress = { node.diskUsagePercentage },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp)
                         .clip(RoundedCornerShape(4.dp)),
                     color = when {
-                        node.getDiskUsagePercentage() > 0.9f -> MaterialTheme.colorScheme.error
-                        node.getDiskUsagePercentage() > 0.7f -> Color(0xFFFFA500) // Orange
+                        node.diskUsagePercentage > 0.9f -> MaterialTheme.colorScheme.error
+                        node.diskUsagePercentage > 0.7f -> Color(0xFFFFA500) // Orange
                         else -> MaterialTheme.colorScheme.primary
                     },
                     trackColor = MaterialTheme.colorScheme.outlineVariant

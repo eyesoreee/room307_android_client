@@ -28,15 +28,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.room307.files.domain.model.FileItem
 
 @Composable
 fun FileCard(
-    modifier: Modifier = Modifier,
-    fileName: String,
-    fileSize: String,
-    fileDate: String,
+    file: FileItem,
     onDownloadClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
@@ -60,7 +59,7 @@ fun FileCard(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = getFileIcon(fileName),
+                imageVector = getFileIcon(file.name),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
@@ -72,7 +71,7 @@ fun FileCard(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = fileName,
+                text = file.name,
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontWeight = FontWeight.Medium
                 ),
@@ -86,7 +85,7 @@ fun FileCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = fileSize,
+                    text = file.formattedSize,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -96,7 +95,7 @@ fun FileCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = fileDate,
+                    text = file.formattedDate,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

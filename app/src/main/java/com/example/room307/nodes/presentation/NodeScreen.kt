@@ -112,7 +112,7 @@ fun NodeScreen(
                             ) {
                                 items(
                                     items = uiState.displayedNodes,
-                                    key = { it.id ?: it.hashCode() }
+                                    key = { it.id }
                                 ) { node ->
                                     NodeCard(
                                         node = node,
