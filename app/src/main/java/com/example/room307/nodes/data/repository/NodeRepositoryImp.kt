@@ -1,5 +1,6 @@
 package com.example.room307.nodes.data.repository
 
+import android.util.Log
 import com.example.room307.di.NodeUrlManager
 import com.example.room307.nodes.data.remote.NodeApi
 import com.example.room307.nodes.data.remote.toNodeItem
@@ -9,6 +10,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import retrofit2.Retrofit
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -34,13 +36,31 @@ class NodeRepositoryImp @Inject constructor(
     }
 
     override suspend fun testConnection(ip: String, port: String): Result<Int> {
-        val targetIp = if (ip == "localhost" || ip == "127.0.0.1") "10.0.2.2" else ip
-        val baseUrl = "http://$targetIp:$port/"
+        val trimmedIp = ip.trim()
+        val trimmedPort = port.trim()
+        
+        // Handle emulator loopback correctly
+        val targetIp = when (trimmedIp) {
+            "localhost", "127.0.0.1" -> "10.0.2.2"
+            else -> trimmedIp
+        }
+        
+        // Ensure trailing slash for Retrofit baseUrl
+        val baseUrl = "http://$targetIp:$trimmedPort/"
+        Log.d("TestConnection", "Testing: $baseUrl")
 
         return runCatching {
             val cleanClient = OkHttpClient.Builder()
+                .protocols(listOf(Protocol.HTTP_1_1))
                 .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS) // Increased because backend is slow pinging nodes
+                .addInterceptor { chain ->
+                    val request = chain.request().newBuilder()
+                        .header("User-Agent", "ROOM307-Android-Client")
+                        .header("Connection", "close")
+                        .build()
+                    chain.proceed(request)
+                }
                 .build()
 
             val contentType = "application/json".toMediaType()
@@ -51,24 +71,24 @@ class NodeRepositoryImp @Inject constructor(
                 .build()
                 .create(NodeApi::class.java)
 
+            // Actually call the endpoint
             val response = tempApi.getAllNodes()
-            if (response.isSuccessful && response.body() != null) {
-                response.body()!!.size
+            
+            if (response.isSuccessful) {
+                val nodes = response.body() ?: emptyList()
+                Log.d("TestConnection", "Success! Found ${nodes.size} nodes.")
+                nodes.size
             } else {
-                throw Exception("HTTP Error: ${response.code()}")
+                val errorMsg = "HTTP ${response.code()}: ${response.errorBody()?.string() ?: "Unknown error"}"
+                Log.e("TestConnection", errorMsg)
+                throw Exception(errorMsg)
             }
         }.recoverCatching { e ->
+            Log.e("TestConnection", "Failed: ${e.message}", e)
             throw when (e) {
-                is ConnectException -> Exception("Connection refused. Is the server running?")
-                is SocketTimeoutException -> Exception("Timeout. Check your IP and Firewall.")
-                else -> {
-                    val message = if (e.message?.contains("No server nodes available") == true) {
-                        "Internal error: Interceptor blocked the test."
-                    } else {
-                        e.localizedMessage ?: "Connection failed"
-                    }
-                    Exception(message)
-                }
+                is ConnectException -> Exception("Connection refused. Is the server running on $baseUrl?")
+                is SocketTimeoutException -> Exception("Timeout. Server took too long to respond (Backend might be slow pinging nodes).")
+                else -> Exception("Connection failed: ${e.localizedMessage}")
             }
         }
     }

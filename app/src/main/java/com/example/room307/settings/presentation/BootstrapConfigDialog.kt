@@ -63,14 +63,16 @@ fun BootstrapNodeDialog(
                     onValueChange = { ip = it; onResetTest() },
                     label = { Text("IP Address") },
                     placeholder = { Text("e.g. 192.168.1.1") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = port,
                     onValueChange = { port = it; onResetTest() },
                     label = { Text("Port") },
                     placeholder = { Text("e.g. 8001") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
 
                 AnimatedVisibility(visible = testResult != TestResult.Idle) {

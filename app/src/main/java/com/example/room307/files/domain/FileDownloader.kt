@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -35,7 +36,7 @@ class FileDownloader @Inject constructor(
 
     private fun createNotificationChannel() {
         val channel =
-            NotificationChannel(channelId, "File Downloads", NotificationManager.IMPORTANCE_DEFAULT)
+            NotificationChannel(channelId, "File Downloads", NotificationManager.IMPORTANCE_LOW)
         notificationManager.createNotificationChannel(channel)
     }
 
@@ -44,22 +45,38 @@ class FileDownloader @Inject constructor(
             val uniqueFileName = getUniqueFileName(filename)
             val notificationId = filename.hashCode()
             val builder = createProgressNotification(filename)
+            var uri: Uri? = null
 
             try {
                 notificationManager.notify(notificationId, builder.build())
 
                 val folderName = (dataStoreManager.downloadPath.first() ?: "ROOM307").trim()
-                val outputStream = getOutputStream(uniqueFileName, folderName)
+
+                val outputStreamResult = getOutputStreamAndUri(uniqueFileName, folderName)
+                val outputStream = outputStreamResult.first
+                uri = outputStreamResult.second
 
                 if (outputStream != null) {
-                    val success = writeStream(body, outputStream) { progress ->
-                        notificationManager.notify(
-                            notificationId,
-                            builder.setProgress(100, progress, false).build()
-                        )
+                    var lastProgress = -1 // Add this to track progress changes
+                    val success = body.use { responseBody ->
+                        writeStream(responseBody, outputStream) { progress ->
+                            // Only notify when percentage actually increments
+                            if (progress > lastProgress) {
+                                lastProgress = progress
+                                notificationManager.notify(
+                                    notificationId,
+                                    builder.setProgress(100, progress, false).build()
+                                )
+                            }
+                        }
                     }
 
-                    finalizeDownload(uniqueFileName, folderName)
+                    if (success && uri != null) {
+                        finalizeDownload(uri)
+                    } else if (!success && uri != null) {
+                        context.contentResolver.delete(uri, null, null)
+                    }
+
                     showFinishedNotification(notificationId, filename, success)
                     success
                 } else {
@@ -68,32 +85,39 @@ class FileDownloader @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e("FileDownloader", "Download failed: $filename", e)
+                uri?.let { context.contentResolver.delete(it, null, null) }
                 showFinishedNotification(notificationId, filename, false)
                 false
             }
         }
 
-    private fun getOutputStream(fileName: String, folderName: String): OutputStream? {
+    private fun getOutputStreamAndUri(
+        fileName: String,
+        folderName: String
+    ): Pair<OutputStream?, Uri?> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                 put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(fileName))
+                // Ensure the path ends with a slash and is relative to Downloads
                 put(
                     MediaStore.MediaColumns.RELATIVE_PATH,
-                    "${Environment.DIRECTORY_DOWNLOADS}/$folderName"
+                    "${Environment.DIRECTORY_DOWNLOADS}/$folderName/"
                 )
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val uri =
                 context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            uri?.let { context.contentResolver.openOutputStream(it) }
+            val stream = uri?.let { context.contentResolver.openOutputStream(it) }
+            Pair(stream, uri)
         } else {
             val dir = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
                 folderName
             )
             if (!dir.exists()) dir.mkdirs()
-            FileOutputStream(File(dir, fileName))
+            val file = File(dir, fileName)
+            Pair(FileOutputStream(file), Uri.fromFile(file))
         }
     }
 
@@ -103,8 +127,8 @@ class FileDownloader @Inject constructor(
         onProgress: (Int) -> Unit
     ): Boolean {
         return try {
-            body.byteStream().use { input ->
-                outputStream.use { output ->
+            outputStream.use { output ->
+                body.byteStream().use { input ->
                     val buffer = ByteArray(8192)
                     val totalBytes = body.contentLength()
                     var bytesRead: Int
@@ -117,26 +141,20 @@ class FileDownloader @Inject constructor(
                             onProgress((bytesDownloaded * 100 / totalBytes).toInt())
                         }
                     }
+                    output.flush()
                 }
             }
             true
         } catch (e: Exception) {
+            Log.e("FileDownloader", "Stream write error", e)
             false
         }
     }
 
-    private fun finalizeDownload(fileName: String, folderName: String) {
+    private fun finalizeDownload(uri: Uri) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val selection =
-                "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
-            val args = arrayOf(fileName, "${Environment.DIRECTORY_DOWNLOADS}/$folderName")
             val values = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-            context.contentResolver.update(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                values,
-                selection,
-                args
-            )
+            context.contentResolver.update(uri, values, null, null)
         }
     }
 
@@ -146,16 +164,21 @@ class FileDownloader @Inject constructor(
             .setContentTitle("Downloading $filename")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setProgress(100, 0, true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setProgress(100, 0, false)
 
     private fun showFinishedNotification(id: Int, filename: String, success: Boolean) {
+        notificationManager.cancel(id)
+
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(if (success) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
             .setContentTitle(if (success) "Download Complete" else "Download Failed")
             .setContentText(filename)
             .setAutoCancel(true)
+            .setOngoing(false)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
+
         notificationManager.notify(id, notification)
     }
 

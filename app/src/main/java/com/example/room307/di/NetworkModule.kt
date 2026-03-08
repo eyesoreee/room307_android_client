@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+import java.util.concurrent.TimeUnit
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -33,6 +34,10 @@ object NetworkModule {
     fun provideOkHttpClient(failoverInterceptor: FailoverInterceptor): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(failoverInterceptor)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
     }
 
