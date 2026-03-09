@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
+import com.example.room307.R
 import com.example.room307.data.local.DataStoreManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 import javax.inject.Inject
+import kotlin.math.abs
 
 class FileDownloader @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -28,22 +30,29 @@ class FileDownloader @Inject constructor(
 ) {
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val channelId = "file_download_channel"
+    private val channelId = "file_download_channel_v2"
 
     init {
         createNotificationChannel()
     }
 
     private fun createNotificationChannel() {
-        val channel =
-            NotificationChannel(channelId, "File Downloads", NotificationManager.IMPORTANCE_LOW)
-        notificationManager.createNotificationChannel(channel)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "File Downloads",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications for file download progress"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
     }
 
     suspend fun saveFileToDisk(filename: String, body: ResponseBody): Boolean =
         withContext(Dispatchers.IO) {
             val uniqueFileName = getUniqueFileName(filename)
-            val notificationId = filename.hashCode()
+            val notificationId = abs(filename.hashCode())
             val builder = createProgressNotification(filename)
             var uri: Uri? = null
 
@@ -57,10 +66,9 @@ class FileDownloader @Inject constructor(
                 uri = outputStreamResult.second
 
                 if (outputStream != null) {
-                    var lastProgress = -1 // Add this to track progress changes
+                    var lastProgress = -1
                     val success = body.use { responseBody ->
                         writeStream(responseBody, outputStream) { progress ->
-                            // Only notify when percentage actually increments
                             if (progress > lastProgress) {
                                 lastProgress = progress
                                 notificationManager.notify(
@@ -99,7 +107,6 @@ class FileDownloader @Inject constructor(
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                 put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(fileName))
-                // Ensure the path ends with a slash and is relative to Downloads
                 put(
                     MediaStore.MediaColumns.RELATIVE_PATH,
                     "${Environment.DIRECTORY_DOWNLOADS}/$folderName/"
@@ -160,18 +167,18 @@ class FileDownloader @Inject constructor(
 
     private fun createProgressNotification(filename: String) =
         NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Downloading $filename")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setProgress(100, 0, false)
 
     private fun showFinishedNotification(id: Int, filename: String, success: Boolean) {
         notificationManager.cancel(id)
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(if (success) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(if (success) "Download Complete" else "Download Failed")
             .setContentText(filename)
             .setAutoCancel(true)

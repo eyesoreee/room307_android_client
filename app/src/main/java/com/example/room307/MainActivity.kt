@@ -36,16 +36,16 @@ class MainActivity : ComponentActivity() {
             nodeRepository.getAllNodes()
         }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                1
+            )
+        }
+
         enableEdgeToEdge()
         setContent {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                    1
-                )
-            }
-
             var isDarkTheme by remember { mutableStateOf(true) }
             val useDynamicColors by dataStoreManager.dynamicColors.collectAsState(initial = true)
 
