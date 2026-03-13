@@ -38,14 +38,12 @@ class NodeRepositoryImp @Inject constructor(
     override suspend fun testConnection(ip: String, port: String): Result<Int> {
         val trimmedIp = ip.trim()
         val trimmedPort = port.trim()
-        
-        // Handle emulator loopback correctly
+
         val targetIp = when (trimmedIp) {
             "localhost", "127.0.0.1" -> "10.0.2.2"
             else -> trimmedIp
         }
-        
-        // Ensure trailing slash for Retrofit baseUrl
+
         val baseUrl = "http://$targetIp:$trimmedPort/"
         Log.d("TestConnection", "Testing: $baseUrl")
 
@@ -53,7 +51,7 @@ class NodeRepositoryImp @Inject constructor(
             val cleanClient = OkHttpClient.Builder()
                 .protocols(listOf(Protocol.HTTP_1_1))
                 .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS) // Increased because backend is slow pinging nodes
+                .readTimeout(30, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
                     val request = chain.request().newBuilder()
                         .header("User-Agent", "ROOM307-Android-Client")
@@ -71,15 +69,14 @@ class NodeRepositoryImp @Inject constructor(
                 .build()
                 .create(NodeApi::class.java)
 
-            // Actually call the endpoint
             val response = tempApi.getAllNodes()
-            
             if (response.isSuccessful) {
                 val nodes = response.body() ?: emptyList()
                 Log.d("TestConnection", "Success! Found ${nodes.size} nodes.")
                 nodes.size
             } else {
-                val errorMsg = "HTTP ${response.code()}: ${response.errorBody()?.string() ?: "Unknown error"}"
+                val errorMsg =
+                    "HTTP ${response.code()}: ${response.errorBody()?.string() ?: "Unknown error"}"
                 Log.e("TestConnection", errorMsg)
                 throw Exception(errorMsg)
             }
