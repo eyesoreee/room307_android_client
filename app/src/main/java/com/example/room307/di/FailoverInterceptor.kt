@@ -1,5 +1,6 @@
 package com.example.room307.di
 
+import android.util.Log
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Request
@@ -17,29 +18,38 @@ class FailoverInterceptor @Inject constructor(
     private val lastGoodIndex = AtomicInteger(0)
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val originalRequest = chain.request()
         val urlsToTry = nodeUrlManager.urlsToTry.value
 
         if (urlsToTry.isEmpty()) {
             throw IOException("No server nodes available. Please configure a bootstrap node in settings.")
         }
 
+        val startIndex = lastGoodIndex.get().coerceIn(0, urlsToTry.lastIndex)
         var lastException: IOException? = null
-        val startIndex = lastGoodIndex.get()
 
         for (i in urlsToTry.indices) {
             val currentIndex = (startIndex + i) % urlsToTry.size
             val nodeBaseUrl = urlsToTry[currentIndex]
 
-            try {
-                val newRequest = buildRequestForNode(originalRequest, nodeBaseUrl)
-                    ?: continue
+            val newRequest = buildRequestForNode(chain.request(), nodeBaseUrl)
+            if (newRequest == null) {
+                Log.w(TAG, "Skipping malformed node URL at index $currentIndex: '$nodeBaseUrl'")
+                continue
+            }
 
+            try {
                 val response = chain.proceed(newRequest)
 
-                lastGoodIndex.set(currentIndex)
-                return response
+                if (response.isSuccessful) {
+                    lastGoodIndex.set(currentIndex)
+                    return response
+                }
+
+                Log.w(TAG, "Node $nodeBaseUrl returned ${response.code} — trying next.")
+                response.close()
+                lastException = IOException("Node $nodeBaseUrl returned HTTP ${response.code}")
             } catch (e: IOException) {
+                Log.w(TAG, "Node $nodeBaseUrl unreachable: ${e.message}")
                 lastException = e
             }
         }
@@ -48,16 +58,18 @@ class FailoverInterceptor @Inject constructor(
     }
 
     private fun buildRequestForNode(request: Request, baseUrl: String): Request? {
-        val newBaseHttpUrl = baseUrl.toHttpUrlOrNull() ?: return null
+        val newBase = baseUrl.toHttpUrlOrNull() ?: return null
 
         val newUrl = request.url.newBuilder()
-            .scheme(newBaseHttpUrl.scheme)
-            .host(newBaseHttpUrl.host)
-            .port(newBaseHttpUrl.port)
+            .scheme(newBase.scheme)
+            .host(newBase.host)
+            .port(newBase.port)
             .build()
 
-        return request.newBuilder()
-            .url(newUrl)
-            .build()
+        return request.newBuilder().url(newUrl).build()
+    }
+
+    private companion object {
+        const val TAG = "FailoverInterceptor"
     }
 }
