@@ -52,8 +52,9 @@ fun SettingsScreen(
                 subtitle = "${state.initialServerConfig.ip}:${state.initialServerConfig.port}",
                 onClick = { showBootstrapDialog = true }
             )
-            
-            val frequencyText = if (state.syncFrequency == 60) "Every hour" else "Every ${state.syncFrequency} minutes"
+
+            val frequencyText =
+                if (state.syncFrequency == 60) "Every hour" else "Every ${state.syncFrequency} minutes"
             SettingsItem(
                 icon = Icons.Default.Language,
                 title = "Node Sync Frequency",
@@ -90,7 +91,7 @@ fun SettingsScreen(
                 title = "Dynamic Colors",
                 subtitle = "Sync with system wallpaper colors",
                 checked = state.dynamicColors,
-                onCheckedChange = { enabled -> 
+                onCheckedChange = { enabled ->
                     viewModel.onAction(SettingsAction.ToggleDynamicColors(enabled))
                 }
             )
@@ -100,7 +101,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "Version",
-                subtitle = "1.0.0-alpha (Build 2024.11)",
+                subtitle = "1.0.0",
                 onClick = {}
             )
         }
